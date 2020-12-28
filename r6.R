@@ -1,0 +1,16 @@
+set.seed(22)
+x<-runif(300,-7,4)
+e<-rnorm(300,0,5)
+y<-1.9*x+e
+plot(x,y)
+attach(mtcars)
+layout(matrix(2:1,1 , 2, byrow = T))
+hist(x, col="peachpuff", border="black", prob = TRUE, xlab="x",ylab ="Density", main = "histogram of x", ylim=c(0,0.15))
+lines(density(x), col="red", lwd =2) 
+curve(dunif(x, -7, 4), col = "blue",lwd = 2, add = T)
+hist(e, col="peachpuff", border="black", prob = TRUE, xlab="x", ylab ="Density", main = "histogram of e") 
+lines(density(e), col="red", lwd =2)
+curve(dnorm(e,mean = mean (e), sd = sd(e)), col = "blue",lwd = 2, add = T, xname = "e")
+dev.copy(tiff, filename = "plot-ex06.png")
+dev.off() 
+

@@ -1,0 +1,308 @@
+---
+title: "Лабораторная работа №2"
+author: "Полянцев И.С."
+date: "27 12 2020"
+output: word_document
+---
+```{r setup, include=FALSE}
+# Загрузка библиотек
+library('Hmisc') # для расчёта корреляционной матрицы
+library('corrplot') # визуализация корреляционных матриц
+library('knitr') # для генерации отчёта
+library('nortest') # тест на нормальность: ad.test()
+knitr::opts_chunk$set(echo = FALSE)
+```
+# Раздел I.
+
+Построить модели для Y, в т.ч. с фиктивными переменными по федеральным округам, довести их до состояния значимости всех параметров. Сравнить модели без поправки на p-значения и с поправкой на p-значения. В отчёт включить:
+
+Таблицу ANOVA со сравнением значимых моделей.
+Таблицу с характеристиками качества моделей: F расчётное, средняя ошибка аппроксимации, скорректированный R-квадрат.
+Выбрать лучшую модель.
+
+### Обозначения количественных показателей:
+
+* *"Y.Wage"* – Среднедушевые денежные доходы населения
+
+* *"X1.GRP"* – ВРП на душу населения
+
+* *"X2.Retail"* – Оборот розничной торговли на душу населения
+
+* *"X3.Social.Policy"*  – Расходы консолидированных бюджетов субъектов Российской Федерации: на социальную политику на душу населения
+
+* *"X4.Small.Businesses"* – Число малых предприятий на 10000 человек населения
+
+```{r}
+load('l1_Полянцев.RData')
+
+# множественная регрессия для всех регионов 
+fit.1 <- lm(Wage ~ GRP + Retail + Social.Policy + Small.Businesses, 
+            data = reg.df)
+summary(fit.1)  # незначимые параметры
+```
+
+Модель значима (P-value < 0.05) и объясняет 92,42% разброса зависимой переменной с поправкой на степени свободы.
+Согласно процедуре последовательного исключения незначимых факторов, уберем из модели наименее значимый фактор. 
+Это *Small.Businesses*
+
+```{r}
+fit.2 <- lm(Wage ~ GRP + Retail + Social.Policy, 
+            data = reg.df)
+summary(fit.2)  # незначимые параметры
+```
+
+Теперь все параметры значимы и дальшейнее исключение связано с исключением значимых параметров, поэтому получим 3 варианта моделей только с одним параметром
+```{r}
+fit.X1 <- lm(Wage ~ GRP, 
+            data = reg.df)
+summary(fit.X1)
+fit.X2 <- lm(Wage ~ Retail, 
+            data = reg.df)
+summary(fit.X2)
+fit.X3 <- lm(Wage ~ Social.Policy, 
+            data = reg.df)
+summary(fit.X3)
+
+```
+
+Добавим в каждую полученную модель фиктивные переменные, используя принадлежность каждого региона к одному из восьми федеральных округов.
+
+```{r}
+fit.X1.fo <- lm(Wage ~ GRP * FO, 
+                data = reg.df)
+summary(fit.X1.fo)
+
+fit.X2.fo <- lm(Wage ~ Retail * FO, 
+                data = reg.df)
+summary(fit.X2.fo)
+
+fit.X3.fo <- lm(Wage ~ Social.Policy * FO, 
+                data = reg.df)
+summary(fit.X3.fo)
+```
+
+Применяем функцию для исключения незначимых регрессоров к 1 модели 
+
+```{r}
+# создаём фрейм со всеми переменными-факторами (создаём фиктивные)
+X.matrix <- model.matrix(Wage ~ GRP * FO, data = reg.df)
+
+# присоединяем независимую переменную
+data.fit <- cbind(Wage = reg.df$Wage, 
+                  data.frame(X.matrix)[, -1])
+data.fit.X1.fo <- data.fit
+source('removeFactorsByPValue.R')
+fit.X1.fo <- removeFactorsByPValue(data = data.fit, 
+                                   y.var.name = 'Wage')
+summary(fit.X1.fo)
+
+```
+
+Аналогично для 2 модели:
+
+```{r}
+# создаём фрейм со всеми переменными-факторами (создаём фиктивные)
+X.matrix <- model.matrix(Wage ~ Retail * FO, data = reg.df)
+
+# присоединяем независимую переменную
+data.fit <- cbind(Wage = reg.df$Wage, 
+                  data.frame(X.matrix)[, -1])
+data.fit.X2.fo <- data.fit
+source('removeFactorsByPValue.R')
+fit.X2.fo <- removeFactorsByPValue(data = data.fit, 
+                                   y.var.name = 'Wage')
+summary(fit.X2.fo)
+
+```
+
+Аналогично для 3 модели:
+
+```{r}
+# создаём фрейм со всеми переменными-факторами (создаём фиктивные)
+X.matrix <- model.matrix(Wage ~ Social.Policy * FO, data = reg.df)
+
+# присоединяем независимую переменную
+data.fit <- cbind(Wage = reg.df$Wage, 
+                  data.frame(X.matrix)[, -1])
+data.fit.X3.fo <- data.fit
+source('removeFactorsByPValue.R')
+fit.X3.fo <- removeFactorsByPValue(data = data.fit, 
+                                   y.var.name = 'Wage')
+summary(fit.X3.fo)
+
+```
+
+Используем функцию anova(), чтобы проверить гипотезы об эквивалентности построенных моделей.
+
+```{r}
+anova(fit.X1, fit.X1.fo)
+anova(fit.X2, fit.X2.fo)
+anova(fit.X3, fit.X3.fo)
+```
+
+Видно, что для двух рассматриваемых факторов добавление фиктивных переменных уменьшает остаточную дисперсию (RSS).
+Составим список моделей
+
+```{r}
+models.list <- list(fit.X1, fit.X1.fo, fit.X2, fit.X2.fo, fit.X3, fit.X3.fo)
+names(models.list) <- c('fit.X1', 'fit.X1.fo', 'fit.X2', 'fit.X2.fo', 'fit.X3', 'fit.X3.fo')
+
+# фрейм с характеристиками четырёх моделей
+df.goodness.of.fit <- data.frame(Модель = names(models.list), 
+                                       R.2.скорр = 0,
+                                       F.расч = 0,
+                                       Станд.Ошибка = 0)
+for (i in 1:length(models.list)) {
+    # скорректированный R-квадрат
+    df.goodness.of.fit[i, 'R.2.скорр'] <- 
+        round(summary(models.list[[i]])$adj.r.squared, 3)
+    # F расчётное
+    df.goodness.of.fit[i, 'F.расч'] <- 
+        round(summary(models.list[[i]])$fstatistic[1], 2)
+    # стандартная ошибка
+    df.goodness.of.fit[i, 'Станд.Ошибка'] <- 
+        round(summary(models.list[[i]])$sigma, 1)
+}
+df.goodness.of.fit
+
+save(list = c('data.fit.X1.fo', 'data.fit.X2.fo', 'data.fit.X3.fo', 'DF', 'reg.df',
+              'models.list'), 
+     file = 'l2_Полянцев.RData')
+```
+
+Лучшей моделью является модель 2, т.к. она имеет наименьшую стандартную ошибку
+
+# Раздел II.
+
+```{r}
+load('l1_Полянцев.RData')
+
+# множественная регрессия для всех регионов 
+fit.1 <- lm(Wage ~ GRP + Retail + Social.Policy + Small.Businesses, 
+            data = DFF)
+summary(fit.1)  # незначимые параметры
+```
+
+Модель значима (P-value < 0.05) и объясняет 89,17% разброса зависимой переменной с поправкой на степени свободы.
+Согласно процедуре последовательного исключения незначимых факторов, уберем из модели наименее значимый фактор. 
+Это *Small.Businesses*
+
+```{r}
+fit.2 <- lm(Wage ~ GRP + Retail + Social.Policy, 
+            data = DFF)
+summary(fit.2)  # незначимые параметры
+```
+
+Теперь все параметры значимы и дальшейнее исключение связано с исключением значимых параметров, поэтому получим 3 варианта моделей только с одним параметром
+```{r}
+fit.X1 <- lm(Wage ~ GRP, 
+            data = DFF)
+summary(fit.X1)
+fit.X2 <- lm(Wage ~ Retail, 
+            data = DFF)
+summary(fit.X2)
+fit.X3 <- lm(Wage ~ Social.Policy, 
+            data = DFF)
+summary(fit.X3)
+
+```
+
+Добавим в каждую полученную модель фиктивные переменные, используя принадлежность каждого региона к одному из восьми федеральных округов.
+
+```{r}
+fit.X1.fo <- lm(Wage ~ GRP * FO, 
+                data = DFF)
+summary(fit.X1.fo)
+
+fit.X2.fo <- lm(Wage ~ Retail * FO, 
+                data = DFF)
+summary(fit.X2.fo)
+
+fit.X3.fo <- lm(Wage ~ Social.Policy * FO, 
+                data = DFF)
+summary(fit.X3.fo)
+```
+
+Применяем функцию для исключения незначимых регрессоров к 1 модели 
+
+```{r}
+# создаём фрейм со всеми переменными-факторами (создаём фиктивные)
+X.matrix <- model.matrix(Wage ~ GRP * FO, data = DFF)
+
+# присоединяем независимую переменную
+data.fit <- cbind(Wage = DFF$Wage, 
+                  data.frame(X.matrix)[, -1])
+source('removeFactorsByPValue.R')
+fit.X1.fo <- removeFactorsByPValue(data = data.fit, 
+                                   y.var.name = 'Wage')
+summary(fit.X1.fo)
+
+```
+
+Аналогично для 2 модели:
+
+```{r}
+# создаём фрейм со всеми переменными-факторами (создаём фиктивные)
+X.matrix <- model.matrix(Wage ~ Retail * FO, data = DFF)
+
+# присоединяем независимую переменную
+data.fit <- cbind(Wage = DFF$Wage, 
+                  data.frame(X.matrix)[, -1])
+source('removeFactorsByPValue.R')
+fit.X2.fo <- removeFactorsByPValue(data = data.fit, 
+                                   y.var.name = 'Wage')
+summary(fit.X2.fo)
+
+```
+
+Аналогично для 3 модели:
+
+```{r}
+# создаём фрейм со всеми переменными-факторами (создаём фиктивные)
+X.matrix <- model.matrix(Wage ~ Social.Policy * FO, data = DFF)
+
+# присоединяем независимую переменную
+data.fit <- cbind(Wage = DFF$Wage, 
+                  data.frame(X.matrix)[, -1])
+source('removeFactorsByPValue.R')
+fit.X3.fo <- removeFactorsByPValue(data = data.fit, 
+                                   y.var.name = 'Wage')
+summary(fit.X3.fo)
+
+```
+
+Используем функцию anova(), чтобы проверить гипотезы об эквивалентности построенных моделей.
+
+```{r}
+anova(fit.X1, fit.X1.fo)
+anova(fit.X2, fit.X2.fo)
+anova(fit.X3, fit.X3.fo)
+```
+
+Видно, что для двух рассматриваемых факторов добавление фиктивных переменных уменьшает остаточную дисперсию (RSS).
+Составим список моделей
+
+```{r}
+models.list <- list(fit.X1, fit.X1.fo, fit.X2, fit.X2.fo, fit.X3, fit.X3.fo)
+names(models.list) <- c('fit.X1', 'fit.X1.fo', 'fit.X2', 'fit.X2.fo', 'fit.X3', 'fit.X3.fo')
+
+# фрейм с характеристиками четырёх моделей
+df.goodness.of.fit <- data.frame(Модель = names(models.list), 
+                                       R.2.скорр = 0,
+                                       F.расч = 0,
+                                       Станд.Ошибка = 0)
+for (i in 1:length(models.list)) {
+    # скорректированный R-квадрат
+    df.goodness.of.fit[i, 'R.2.скорр'] <- 
+        round(summary(models.list[[i]])$adj.r.squared, 3)
+    # F расчётное
+    df.goodness.of.fit[i, 'F.расч'] <- 
+        round(summary(models.list[[i]])$fstatistic[1], 2)
+    # стандартная ошибка
+    df.goodness.of.fit[i, 'Станд.Ошибка'] <- 
+        round(summary(models.list[[i]])$sigma, 1)
+}
+df.goodness.of.fit
+```
+
+Лучшей моделью является модель 2, т.к. она имеет наименьшую стандартную ошибку
